@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node --no-warnings server.js",
-    "start:dataset": "node --no-warnings server.js --data /Users/yair/Documents/Codex/2026-06-25/can/work/batch_images --db ./annotations.sqlite --save ./annotations.csv --host 0.0.0.0 --port 3000"
+    "check": "node --check server.js && node --check public/app.js",
+    "run:local": "scripts/run-local.sh"
   },
   "engines": {
     "node": ">=22.5"

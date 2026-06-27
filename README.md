@@ -1,88 +1,130 @@
 # Hebrew Swipe Annotator
 
-Mobile-first yes/no image annotation for Hebrew image datasets.
+Mobile-first yes/no/skip image annotation for Hebrew image datasets. The app serves images from a local folder, shows the Hebrew prompt, and saves every action to a local SQLite database on the host laptop.
 
-## Run on this dataset
+## Quick Start
 
 ```bash
-cd /Users/yair/Documents/Codex/2026-06-27/assume-i-have-a-set-of/outputs/hebrew-swipe-annotator
-npm run start:dataset
+git clone https://github.com/YairAmar/swipe-labeler.git
+cd swipe-labeler
+git switch codex/hebrew-swipe-annotator-sqlite
+
+./scripts/run-local.sh "$HOME/Desktop/batch_images" "$HOME/Desktop/annotator-output"
 ```
 
-This starts a local SQLite database at `./annotations.sqlite` and a CSV export at `./annotations.csv`. Then open:
+Open:
 
 ```text
 http://127.0.0.1:3000
 ```
 
-For iPhone on the same Wi-Fi, find your machine IP and open:
+The image folder should be copied separately, for example by AirDrop. Do not commit image data to the repo.
 
-```text
-http://<your-computer-ip>:3000
-```
+## Common Hosting Modes
 
-The server prints the phone URL pattern when it starts. The `start:dataset` script binds to `0.0.0.0`, which allows other devices on the local network to connect.
-
-## Custom run
+Private on the MacBook:
 
 ```bash
-node server.js \
-  --data /path/to/images \
-  --db /path/to/annotations.sqlite \
-  --save /path/to/annotations.csv \
-  --host 0.0.0.0 \
-  --port 3000
+./scripts/run-local.sh "$HOME/Desktop/batch_images" "$HOME/Desktop/annotator-output"
 ```
 
-Optional password protection:
+iPhone on the same Wi-Fi:
 
 ```bash
-node server.js \
-  --data /path/to/images \
-  --db /path/to/annotations.sqlite \
-  --save /path/to/annotations.csv \
-  --host 0.0.0.0 \
-  --port 3000 \
-  --password "choose-a-password"
+HOST=0.0.0.0 ./scripts/run-local.sh "$HOME/Desktop/batch_images" "$HOME/Desktop/annotator-output"
+ipconfig getifaddr en0
 ```
 
-When password protection is enabled, the browser can use any username; only the password is checked.
+Then open `http://<macbook-wifi-ip>:3000` on the iPhone.
 
-## Annotation behavior
+Public temporary URL:
+
+```bash
+ANNOTATOR_PASSWORD="choose-a-password" \
+./scripts/run-local.sh "$HOME/Desktop/batch_images" "$HOME/Desktop/annotator-output"
+```
+
+In another terminal:
+
+```bash
+npx --yes localtunnel --port 3000 --local-host 127.0.0.1
+```
+
+Use any username and the configured password when the browser asks for login.
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the full MacBook-to-MacBook runbook, backup commands, tunnel instructions, and safety checklist.
+
+## Annotation Behavior
 
 - Swipe right or tap `Yes` to write `yes`.
 - Swipe left or tap `No` to write `no`.
-- Tap `Skip` to write `skip`; skipped images are considered handled and will not reappear unless you remove their CSV row.
+- Tap `Skip` to write `skip`.
 - `Undo` reverses the last annotation in the current server session.
-- `CSV` downloads the current annotation CSV export.
+- `CSV` downloads the current CSV export.
 - Existing SQLite rows are loaded on startup, so the app resumes from the next unlabeled image.
 - Existing CSV rows are imported into SQLite on startup if the DB does not already contain them.
 
-The CSV format is:
+## Storage
+
+SQLite is the source of truth.
+
+Default output from `scripts/run-local.sh`:
+
+```text
+run-data/annotations.sqlite
+run-data/annotations.csv
+```
+
+Recommended output on another MacBook:
+
+```text
+~/Desktop/annotator-output/annotations.sqlite
+~/Desktop/annotator-output/annotations.csv
+```
+
+Database tables:
+
+- `annotations`: current label per image file.
+- `annotation_events`: append-only event log for annotate/import/undo actions.
+
+CSV format:
 
 ```csv
 file,prompt,label,annotated_at
 ```
 
-SQLite is the source of truth. The database has:
+## Direct Server Command
 
-- `annotations`: the current label per file.
-- `annotation_events`: an append-only event log for annotate/import/undo actions.
+The helper script is preferred, but the raw command is:
 
-## Dataset-specific handling
+```bash
+node --no-warnings server.js \
+  --data /path/to/images \
+  --db /path/to/annotations.sqlite \
+  --save /path/to/annotations.csv \
+  --host 127.0.0.1 \
+  --port 3000 \
+  --password "optional-password"
+```
+
+## Dataset Handling
 
 If `batch_manifest.jsonl` exists inside the image directory, the app uses `word_hebrew` from that manifest as the displayed prompt. Otherwise it derives the prompt from the filename by removing suffixes like `__003`.
 
-Images are served through stable internal IDs, so Hebrew filenames, spaces, and punctuation do not need to appear in image URLs.
+Images are served through stable internal IDs, so Hebrew filenames, spaces, apostrophes, and punctuation do not appear in image URLs.
 
-## Simple AWS option
+The server detects image MIME type from file bytes. This matters when files have `.png` names but contain JPEG bytes.
 
-For a minimal remote setup, use one small EC2 or Lightsail instance:
+## Development Checks
 
-1. Install Node.js 18+.
-2. Copy this folder and the image directory to the instance.
-3. Run the server with `--host 0.0.0.0 --db /path/to/annotations.sqlite --password <password>`.
-4. Open only the selected port in the security group, preferably to known IPs.
-5. Download `annotations.csv` when labeling is complete.
+```bash
+npm run check
+```
 
-For sensitive images, put the service behind HTTPS and stronger auth before sharing it broadly.
+Generated data is ignored by git:
+
+- image folders and image files
+- `*.jsonl`
+- `*.csv`
+- `*.sqlite`
+- SQLite WAL/SHM files

@@ -795,6 +795,16 @@ async function main() {
     }
   });
 
+  server.on("error", (error) => {
+    if (error.code === "EADDRINUSE") {
+      console.error(`Port ${port} is already in use on ${args.host}. Set PORT to another value, for example: PORT=3001 scripts/run-local.sh <image-directory>`);
+    } else {
+      console.error(error);
+    }
+    store.close();
+    process.exit(1);
+  });
+
   server.listen(port, args.host, () => {
     const lanHint = args.host === "0.0.0.0" ? "http://<your-computer-ip>:" : `http://${args.host}:`;
     console.log(`Hebrew Swipe Annotator`);
