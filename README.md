@@ -1,55 +1,88 @@
-# Swipe Labeler
-Easier and more accessible dataset labeling for classification tasks by swiping on touch-enabled devices.  
-It also enables you to label the dateset on your machine remotely using your phone.
+# Hebrew Swipe Annotator
 
-<p align="center"><img align="center" src="demo/demo.gif"/></p>  
+Mobile-first yes/no image annotation for Hebrew image datasets.
 
-# Getting started
-You can start by installing the package:
-```command
-~$ npm install -g swipe-labeler
-```
-For the purpose of using the sample images provided, you can also clone the repository:
-```command
-~$ git clone https://github.com/manzik/swipe-labeler/
-```
-Enter the following command to start a server on port `3000` for labeling the images inside folder `swipe-labeler/sample_pet_images` with classes `cat` for left swipe and `dog` for right swipe, and saving the labeled results in the csv file `labels.csv`:
-```command
-~$ swipe-labeler -d swipe-labeler/sample_pet_images/ -s labels.csv --label-left cat --label-right dog -p 3000
-Labels file doesn't exist, creating the labels file.
-The server is running. You can navigate to http://<public_ip>:3000 on your touch-enabled device or http://localhost:3000 on your machine to access the labeler.
+## Run on this dataset
+
+```bash
+cd /Users/yair/Documents/Codex/2026-06-27/assume-i-have-a-set-of/outputs/hebrew-swipe-annotator
+npm run start:dataset
 ```
 
-You can see a full list of options available by entering `swipe-labeler -h`:
-```command
-~$ swipe-labeler -h
-Usage: swipe-labeler [options]
+This starts a local SQLite database at `./annotations.sqlite` and a CSV export at `./annotations.csv`. Then open:
 
-Options:
-  -d, --data <folderpath>     folder path for data to label
-  -s, --save <filepath>       file path to save the resulting labels csv file
-  -p, --port <port>           Port number (default: "8080")
-  -ll, --label-left <label>   name for left swipe label
-  -lr, --label-right <label>  name for right swipe label
-  -lu, --label-up [label]     name for up swipe label
-  -hc, --hide-class-numbers   hide the number of labled and remaining items in client's browser (default: false)
-  -h, --help                  display help for command
+```text
+http://127.0.0.1:3000
 ```
-**\*** By using the same --save (-s) argument when starting the server next time, you can resume the labeling process.  
 
-Navigate to the machine's address on the specified port to access the labeler.  
-Every time you label an image, a line for the input label and the corresponding file gets appended to the `labels.csv` file on the go, and it will look like this in the end:
+For iPhone on the same Wi-Fi, find your machine IP and open:
 
-| file          | label         |
-| --------------|:-------------:|
-| pet_01.jpg    | cat           |
-| pet_02.jpg    | dog           |
-| pet_03.jpg    | cat           |
-| pet_04.jpg    | dog           |
-| pet_05.jpg    | dog           |
-| ...           | ...           |
+```text
+http://<your-computer-ip>:3000
+```
 
+The server prints the phone URL pattern when it starts. The `start:dataset` script binds to `0.0.0.0`, which allows other devices on the local network to connect.
 
-#   
-- The frontend swiping implementation is from [here](https://www.outsystems.com/blog/posts/gestures_glamour_swipeable_stacked_cards/).
-- The sample images have been collected from the Unsplash website.
+## Custom run
+
+```bash
+node server.js \
+  --data /path/to/images \
+  --db /path/to/annotations.sqlite \
+  --save /path/to/annotations.csv \
+  --host 0.0.0.0 \
+  --port 3000
+```
+
+Optional password protection:
+
+```bash
+node server.js \
+  --data /path/to/images \
+  --db /path/to/annotations.sqlite \
+  --save /path/to/annotations.csv \
+  --host 0.0.0.0 \
+  --port 3000 \
+  --password "choose-a-password"
+```
+
+When password protection is enabled, the browser can use any username; only the password is checked.
+
+## Annotation behavior
+
+- Swipe right or tap `Yes` to write `yes`.
+- Swipe left or tap `No` to write `no`.
+- Tap `Skip` to write `skip`; skipped images are considered handled and will not reappear unless you remove their CSV row.
+- `Undo` reverses the last annotation in the current server session.
+- `CSV` downloads the current annotation CSV export.
+- Existing SQLite rows are loaded on startup, so the app resumes from the next unlabeled image.
+- Existing CSV rows are imported into SQLite on startup if the DB does not already contain them.
+
+The CSV format is:
+
+```csv
+file,prompt,label,annotated_at
+```
+
+SQLite is the source of truth. The database has:
+
+- `annotations`: the current label per file.
+- `annotation_events`: an append-only event log for annotate/import/undo actions.
+
+## Dataset-specific handling
+
+If `batch_manifest.jsonl` exists inside the image directory, the app uses `word_hebrew` from that manifest as the displayed prompt. Otherwise it derives the prompt from the filename by removing suffixes like `__003`.
+
+Images are served through stable internal IDs, so Hebrew filenames, spaces, and punctuation do not need to appear in image URLs.
+
+## Simple AWS option
+
+For a minimal remote setup, use one small EC2 or Lightsail instance:
+
+1. Install Node.js 18+.
+2. Copy this folder and the image directory to the instance.
+3. Run the server with `--host 0.0.0.0 --db /path/to/annotations.sqlite --password <password>`.
+4. Open only the selected port in the security group, preferably to known IPs.
+5. Download `annotations.csv` when labeling is complete.
+
+For sensitive images, put the service behind HTTPS and stronger auth before sharing it broadly.

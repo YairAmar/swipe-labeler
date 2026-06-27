@@ -1,26 +1,59 @@
-<!DOCTYPE html>
-<!-- https://codepen.io/bmarcelino/pen/vRYPXV -->
-<html>
+<!doctype html>
+<html lang="en">
   <head>
-    <link href="styles.css" rel="stylesheet" type="text/css" />
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-    <script src="main.js"></script>
-    <script src="swipe.js"></script>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#121417">
+    <title>Hebrew Swipe Annotator</title>
+    <link rel="icon" href="data:,">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
-    <span id="classes-numbers"></span>
-    <div id="stacked-cards-block" class="stackedcards stackedcards--animatable init">
-      <div class="stackedcards-container">
-        <div class="card-item"></div>
-      </div>
-      <div class="stackedcards--animatable stackedcards-overlay top">TOP</div>
-      <div class="stackedcards--animatable stackedcards-overlay right">RIGHT</div>
-      <div class="stackedcards--animatable stackedcards-overlay left">LEFT</div>
-    </div>
-    <div class="global-actions">
-      <div class="left-action">Left</div>
-      <div class="top-action">Top</div>
-      <div class="right-action">Right</div>
-    </div>  
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="progress-copy">
+          <span id="progressText">Loading...</span>
+          <span id="remainingText"></span>
+        </div>
+        <div class="progress-track" aria-hidden="true">
+          <div id="progressFill" class="progress-fill"></div>
+        </div>
+      </header>
+
+      <section id="reviewStage" class="review-stage" aria-live="polite">
+        <div id="card" class="image-card">
+          <div class="prompt-wrap">
+            <p id="prompt" class="prompt" dir="rtl">...</p>
+            <p id="filename" class="filename" dir="auto"></p>
+          </div>
+          <div id="imageFrame" class="image-frame">
+            <img id="image" alt="">
+            <div id="dragCue" class="drag-cue"></div>
+          </div>
+          <div id="metadata" class="metadata"></div>
+        </div>
+      </section>
+
+      <section id="doneState" class="done-state" hidden>
+        <h1>Done</h1>
+        <p>All visible images have labels in the CSV.</p>
+        <a class="export-link" href="/api/export.csv">Export CSV</a>
+      </section>
+
+      <nav class="action-bar" aria-label="Annotation actions">
+        <div class="utility-row">
+          <button id="skipButton" class="utility-button skip-button" type="button">Skip</button>
+          <button id="undoButton" class="utility-button" type="button" disabled>Undo</button>
+          <a class="utility-button export-button" href="/api/export.csv">CSV</a>
+        </div>
+        <div class="decision-row">
+          <button id="noButton" class="decision-button decision-no" type="button">No</button>
+          <button id="yesButton" class="decision-button decision-yes" type="button">Yes</button>
+        </div>
+      </nav>
+    </main>
+
+    <script src="/app.js" type="module"></script>
   </body>
 </html>
