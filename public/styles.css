@@ -157,8 +157,33 @@ a {
   height: 100%;
   max-height: 100%;
   object-fit: contain;
+  opacity: 1;
+  transition: opacity 120ms ease;
   user-select: none;
   -webkit-user-drag: none;
+}
+
+.image-frame.loading-image img {
+  opacity: 0;
+}
+
+.image-frame.loading-image::after {
+  content: "";
+  position: absolute;
+  inset: 50%;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border: 3px solid #d7dce3;
+  border-top-color: #69707a;
+  border-radius: 50%;
+  animation: spin 850ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .drag-cue {

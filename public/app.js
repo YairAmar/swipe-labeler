@@ -3,7 +3,9 @@ const state = {
   busy: false,
   labels: { left: "no", right: "yes", skip: "skip" },
   hasUndo: false,
-  pointer: null
+  pointer: null,
+  done: false,
+  renderToken: 0
 };
 
 const elements = {
@@ -62,11 +64,20 @@ function labelDisplay(label) {
 }
 
 function setDone(done) {
+  state.done = done;
   elements.reviewStage.hidden = done;
   elements.doneState.hidden = !done;
   elements.noButton.disabled = done;
   elements.yesButton.disabled = done;
   elements.skipButton.disabled = done;
+  elements.undoButton.disabled = !state.hasUndo;
+}
+
+function setInteractionDisabled(disabled) {
+  elements.noButton.disabled = disabled || state.done;
+  elements.yesButton.disabled = disabled || state.done;
+  elements.skipButton.disabled = disabled || state.done;
+  elements.undoButton.disabled = disabled || !state.hasUndo;
 }
 
 function setCardTransform(deltaX, deltaY = 0) {
@@ -98,16 +109,56 @@ function showCue(deltaX) {
   elements.dragCue.style.opacity = String(Math.min(1, Math.abs(deltaX) / 110));
 }
 
-function renderImage(image) {
-  state.current = image;
+function loadImageElement(src, token) {
+  return new Promise((resolve, reject) => {
+    const onLoad = async () => {
+      if (token !== state.renderToken) return;
+      try {
+        if (elements.image.decode) {
+          await elements.image.decode();
+        }
+      } catch {
+        // The load event is authoritative; decode can fail for already-decoded images.
+      }
+      resolve();
+    };
+
+    elements.image.onload = onLoad;
+    elements.image.onerror = () => reject(new Error("Image failed to load"));
+    elements.image.src = src;
+
+    if (elements.image.complete && elements.image.naturalWidth > 0) {
+      onLoad();
+    }
+  });
+}
+
+async function renderImage(image) {
+  const token = state.renderToken + 1;
+  state.renderToken = token;
+  state.current = null;
+  setInteractionDisabled(true);
+  resetCardTransform();
+  elements.imageFrame.classList.add("loading-image");
+  elements.image.onload = null;
+  elements.image.onerror = null;
+  elements.image.hidden = true;
+  elements.image.removeAttribute("src");
+  elements.image.alt = "";
+
   elements.prompt.textContent = image.prompt || image.filename;
   elements.filename.textContent = image.filename;
-  elements.image.alt = image.prompt || image.filename;
-  elements.image.src = `${image.imageUrl}?v=${encodeURIComponent(image.id)}`;
-
   const metadata = [image.meaning, image.category].filter(Boolean).join(" | ");
   elements.metadata.textContent = metadata;
-  resetCardTransform();
+
+  await loadImageElement(`${image.imageUrl}?v=${encodeURIComponent(image.id)}`, token);
+  if (token !== state.renderToken) return;
+
+  elements.image.alt = image.prompt || image.filename;
+  elements.image.hidden = false;
+  elements.imageFrame.classList.remove("loading-image");
+  state.current = image;
+  setInteractionDisabled(false);
 }
 
 async function loadNext() {
@@ -116,7 +167,9 @@ async function loadNext() {
   setDone(data.done);
 
   if (data.image) {
-    renderImage(data.image);
+    await renderImage(data.image);
+  } else {
+    state.current = null;
   }
 }
 
