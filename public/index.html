@@ -41,16 +41,31 @@
         <a class="export-link" href="/api/export.csv">Export CSV</a>
       </section>
 
+      <section id="commentPanel" class="comment-panel" hidden>
+        <div class="comment-header">
+          <span id="reviewStatus">Review comments</span>
+          <span id="reviewLabel"></span>
+        </div>
+        <textarea id="commentText" maxlength="4000" placeholder="Describe what should be fixed before regenerating this image"></textarea>
+      </section>
+
       <nav class="action-bar" aria-label="Annotation actions">
         <div class="utility-row">
           <button id="skipButton" class="utility-button skip-button" type="button">Skip</button>
           <button id="undoButton" class="utility-button" type="button" disabled>Undo</button>
+          <button id="reviewButton" class="utility-button" type="button">Review</button>
           <a class="utility-button export-button" href="/api/export.csv">CSV</a>
         </div>
         <div class="decision-row">
           <button id="noButton" class="decision-button decision-no" type="button">No</button>
           <button id="yesButton" class="decision-button decision-yes" type="button">Yes</button>
         </div>
+      </nav>
+
+      <nav id="reviewBar" class="review-bar" aria-label="Comment review actions" hidden>
+        <button id="annotateButton" class="utility-button" type="button">Annotate</button>
+        <button id="nextReviewButton" class="utility-button" type="button">Next</button>
+        <button id="saveCommentButton" class="decision-button decision-yes" type="button">Save & Next</button>
       </nav>
     </main>
 

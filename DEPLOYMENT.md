@@ -2,6 +2,8 @@
 
 This app is designed to run as one Node.js process on a MacBook. The images stay outside the repo, and annotations are saved to a local SQLite database on that MacBook.
 
+After the first yes/no/skip pass, use the in-app `Review` button to revisit `no` and `skip` images and add text comments for regeneration prompts.
+
 ## What To Copy
 
 Copy these separately:
@@ -127,12 +129,20 @@ Main tables:
 
 - `annotations`: current label per image file.
 - `annotation_events`: append-only event log for annotate/import/undo actions.
+- `annotations.comment`: text note for `no` and `skip` images that need regeneration.
 
 Inspect counts:
 
 ```bash
 sqlite3 "$HOME/Desktop/annotator-output/annotations.sqlite" \
   'select count(*) from annotations; select count(*) from annotation_events;'
+```
+
+Inspect labels and comments:
+
+```bash
+sqlite3 "$HOME/Desktop/annotator-output/annotations.sqlite" \
+  'select file, label, comment from annotations where label in ("no", "skip") order by file;'
 ```
 
 Export CSV through the app:

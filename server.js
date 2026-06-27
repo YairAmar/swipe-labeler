@@ -309,6 +309,7 @@ async function loadCsvAnnotations(savePath, imagesByFilename) {
     const fileIndex = header.indexOf("file");
     const labelIndex = header.indexOf("label");
     const promptIndex = header.indexOf("prompt");
+    const commentIndex = header.indexOf("comment");
     const atIndex = header.indexOf("annotated_at");
 
     if (fileIndex === -1 || labelIndex === -1) {
@@ -324,6 +325,7 @@ async function loadCsvAnnotations(savePath, imagesByFilename) {
         file: filename,
         prompt: row[promptIndex] || imagesByFilename.get(filename).prompt,
         label,
+        comment: commentIndex === -1 ? "" : row[commentIndex] || "",
         annotated_at: row[atIndex] || ""
       });
     }
@@ -346,6 +348,7 @@ class AnnotationStore {
         file TEXT PRIMARY KEY,
         prompt TEXT NOT NULL,
         label TEXT NOT NULL,
+        comment TEXT NOT NULL DEFAULT '',
         annotated_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -354,39 +357,55 @@ class AnnotationStore {
         file TEXT NOT NULL,
         prompt TEXT NOT NULL,
         label TEXT,
+        comment TEXT,
         action TEXT NOT NULL,
         happened_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS annotation_events_file_idx
         ON annotation_events(file);
     `);
+    this.ensureColumn("annotations", "comment", "ALTER TABLE annotations ADD COLUMN comment TEXT NOT NULL DEFAULT ''");
+    this.ensureColumn("annotation_events", "comment", "ALTER TABLE annotation_events ADD COLUMN comment TEXT");
 
     this.selectAnnotations = this.db.prepare(`
-      SELECT file, prompt, label, annotated_at
+      SELECT file, prompt, label, comment, annotated_at
       FROM annotations
       ORDER BY rowid
     `);
     this.upsertAnnotation = this.db.prepare(`
-      INSERT INTO annotations (file, prompt, label, annotated_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO annotations (file, prompt, label, comment, annotated_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(file) DO UPDATE SET
         prompt = excluded.prompt,
         label = excluded.label,
+        comment = excluded.comment,
         annotated_at = excluded.annotated_at,
         updated_at = excluded.updated_at
     `);
     this.insertAnnotationIfMissing = this.db.prepare(`
-      INSERT OR IGNORE INTO annotations (file, prompt, label, annotated_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT OR IGNORE INTO annotations (file, prompt, label, comment, annotated_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    this.updateComment = this.db.prepare(`
+      UPDATE annotations
+      SET comment = ?, updated_at = ?
+      WHERE file = ?
     `);
     this.deleteAnnotation = this.db.prepare(`
       DELETE FROM annotations
       WHERE file = ?
     `);
     this.insertEvent = this.db.prepare(`
-      INSERT INTO annotation_events (file, prompt, label, action, happened_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO annotation_events (file, prompt, label, comment, action, happened_at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
+  }
+
+  ensureColumn(tableName, columnName, alterSql) {
+    const columns = this.db.prepare(`PRAGMA table_info(${tableName})`).all();
+    if (!columns.some((column) => column.name === columnName)) {
+      this.db.exec(alterSql);
+    }
   }
 
   loadCurrent(imagesByFilename) {
@@ -397,6 +416,7 @@ class AnnotationStore {
         file: row.file,
         prompt: row.prompt,
         label: row.label,
+        comment: row.comment || "",
         annotated_at: row.annotated_at
       });
     }
@@ -415,12 +435,13 @@ class AnnotationStore {
           annotation.file,
           annotation.prompt,
           annotation.label,
+          annotation.comment || "",
           annotatedAt,
           annotatedAt
         );
         if (result.changes > 0) {
           imported += 1;
-          this.insertEvent.run(annotation.file, annotation.prompt, annotation.label, "import", annotatedAt);
+          this.insertEvent.run(annotation.file, annotation.prompt, annotation.label, annotation.comment || "", "import", annotatedAt);
         }
       }
       this.db.exec("COMMIT");
@@ -438,10 +459,24 @@ class AnnotationStore {
         annotation.file,
         annotation.prompt,
         annotation.label,
+        annotation.comment || "",
         annotation.annotated_at,
         annotation.annotated_at
       );
-      this.insertEvent.run(annotation.file, annotation.prompt, annotation.label, "annotate", annotation.annotated_at);
+      this.insertEvent.run(annotation.file, annotation.prompt, annotation.label, annotation.comment || "", "annotate", annotation.annotated_at);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  saveComment(annotation, comment) {
+    const happenedAt = new Date().toISOString();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.updateComment.run(comment, happenedAt, annotation.file);
+      this.insertEvent.run(annotation.file, annotation.prompt, annotation.label, comment, "comment", happenedAt);
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -458,13 +493,14 @@ class AnnotationStore {
           previous.file,
           previous.prompt,
           previous.label,
+          previous.comment || "",
           previous.annotated_at,
           happenedAt
         );
-        this.insertEvent.run(previous.file, previous.prompt, previous.label, "undo_restore", happenedAt);
+        this.insertEvent.run(previous.file, previous.prompt, previous.label, previous.comment || "", "undo_restore", happenedAt);
       } else {
         this.deleteAnnotation.run(filename);
-        this.insertEvent.run(filename, "", null, "undo_delete", happenedAt);
+        this.insertEvent.run(filename, "", null, "", "undo_delete", happenedAt);
       }
       this.db.exec("COMMIT");
     } catch (error) {
@@ -480,7 +516,7 @@ class AnnotationStore {
 
 async function writeAnnotationsCsv(savePath, images, annotations) {
   await fsp.mkdir(path.dirname(savePath), { recursive: true });
-  const lines = [csvLine(["file", "prompt", "label", "annotated_at"])];
+  const lines = [csvLine(["file", "prompt", "label", "comment", "annotated_at"])];
 
   for (const image of images) {
     const annotation = annotations.get(image.filename);
@@ -489,6 +525,7 @@ async function writeAnnotationsCsv(savePath, images, annotations) {
       annotation.file,
       annotation.prompt,
       annotation.label,
+      annotation.comment || "",
       annotation.annotated_at
     ]));
   }
@@ -579,11 +616,19 @@ function publicImage(image) {
 
 function statusPayload(images, annotations, labels, history = []) {
   const annotated = annotations.size;
+  const commentable = Array.from(annotations.values())
+    .filter((annotation) => annotation.label === labels.left || annotation.label === labels.skip);
+  const commented = commentable.filter((annotation) => (annotation.comment || "").trim().length > 0).length;
   return {
     total: images.length,
     annotated,
     remaining: images.length - annotated,
     labels,
+    comments: {
+      total: commentable.length,
+      commented,
+      missing: commentable.length - commented
+    },
     canUndo: history.length > 0,
     done: annotated >= images.length
   };
@@ -663,6 +708,29 @@ async function main() {
         return;
       }
 
+      if (request.method === "GET" && requestUrl.pathname === "/api/review/items") {
+        const items = images
+          .map((image) => {
+            const annotation = annotations.get(image.filename);
+            if (!annotation || (annotation.label !== labels.left && annotation.label !== labels.skip)) {
+              return null;
+            }
+            return {
+              ...publicImage(image),
+              label: annotation.label,
+              comment: annotation.comment || "",
+              annotated_at: annotation.annotated_at
+            };
+          })
+          .filter(Boolean);
+
+        sendJson(response, 200, {
+          ...statusPayload(images, annotations, labels, history),
+          items
+        });
+        return;
+      }
+
       if (request.method === "POST" && requestUrl.pathname === "/api/annotate") {
         const body = await readRequestJson(request);
         const image = imagesById.get(body.id);
@@ -682,11 +750,44 @@ async function main() {
           file: image.filename,
           prompt: image.prompt,
           label: body.label,
+          comment: "",
           annotated_at: new Date().toISOString()
         };
         store.saveAnnotation(annotation);
         annotations.set(image.filename, annotation);
         history.push({ filename: image.filename, previous });
+        await writeAnnotationsCsv(savePath, images, annotations);
+
+        sendJson(response, 200, {
+          annotation,
+          ...statusPayload(images, annotations, labels, history)
+        });
+        return;
+      }
+
+      if (request.method === "POST" && requestUrl.pathname === "/api/comment") {
+        const body = await readRequestJson(request);
+        const image = imagesById.get(body.id);
+        const comment = String(body.comment ?? "").slice(0, 4000);
+
+        if (!image) {
+          sendJson(response, 404, { error: "Unknown image id" });
+          return;
+        }
+
+        const annotation = annotations.get(image.filename);
+        if (!annotation) {
+          sendJson(response, 404, { error: "Image has not been annotated yet" });
+          return;
+        }
+        if (annotation.label !== labels.left && annotation.label !== labels.skip) {
+          sendJson(response, 400, { error: "Comments are only needed for no or skip labels" });
+          return;
+        }
+
+        annotation.comment = comment;
+        store.saveComment(annotation, comment);
+        annotations.set(image.filename, annotation);
         await writeAnnotationsCsv(savePath, images, annotations);
 
         sendJson(response, 200, {

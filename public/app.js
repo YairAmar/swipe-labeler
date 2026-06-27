@@ -5,7 +5,10 @@ const state = {
   hasUndo: false,
   pointer: null,
   done: false,
-  renderToken: 0
+  renderToken: 0,
+  mode: "annotate",
+  reviewItems: [],
+  reviewIndex: 0
 };
 
 const elements = {
@@ -14,6 +17,12 @@ const elements = {
   progressFill: document.querySelector("#progressFill"),
   reviewStage: document.querySelector("#reviewStage"),
   doneState: document.querySelector("#doneState"),
+  actionBar: document.querySelector(".action-bar"),
+  reviewBar: document.querySelector("#reviewBar"),
+  commentPanel: document.querySelector("#commentPanel"),
+  reviewStatus: document.querySelector("#reviewStatus"),
+  reviewLabel: document.querySelector("#reviewLabel"),
+  commentText: document.querySelector("#commentText"),
   card: document.querySelector("#card"),
   prompt: document.querySelector("#prompt"),
   filename: document.querySelector("#filename"),
@@ -23,8 +32,12 @@ const elements = {
   metadata: document.querySelector("#metadata"),
   skipButton: document.querySelector("#skipButton"),
   undoButton: document.querySelector("#undoButton"),
+  reviewButton: document.querySelector("#reviewButton"),
   noButton: document.querySelector("#noButton"),
-  yesButton: document.querySelector("#yesButton")
+  yesButton: document.querySelector("#yesButton"),
+  annotateButton: document.querySelector("#annotateButton"),
+  nextReviewButton: document.querySelector("#nextReviewButton"),
+  saveCommentButton: document.querySelector("#saveCommentButton")
 };
 
 async function api(path, options = {}) {
@@ -54,6 +67,9 @@ function updateProgress(data) {
   elements.skipButton.textContent = labelDisplay(state.labels.skip);
   state.hasUndo = Boolean(data.canUndo);
   elements.undoButton.disabled = !state.hasUndo;
+  if (data.comments) {
+    elements.reviewButton.textContent = data.comments.missing > 0 ? `Review ${data.comments.missing}` : "Review";
+  }
 }
 
 function labelDisplay(label) {
@@ -78,6 +94,23 @@ function setInteractionDisabled(disabled) {
   elements.yesButton.disabled = disabled || state.done;
   elements.skipButton.disabled = disabled || state.done;
   elements.undoButton.disabled = disabled || !state.hasUndo;
+  elements.reviewButton.disabled = disabled;
+}
+
+function setReviewDisabled(disabled) {
+  elements.nextReviewButton.disabled = disabled;
+  elements.saveCommentButton.disabled = disabled;
+  elements.commentText.disabled = disabled;
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  const isReview = mode === "review";
+  elements.actionBar.hidden = isReview;
+  elements.reviewBar.hidden = !isReview;
+  elements.commentPanel.hidden = !isReview;
+  elements.doneState.hidden = isReview || !state.done;
+  elements.reviewStage.hidden = !isReview && state.done;
 }
 
 function setCardTransform(deltaX, deltaY = 0) {
@@ -162,6 +195,7 @@ async function renderImage(image) {
 }
 
 async function loadNext() {
+  setMode("annotate");
   const data = await api("/api/next");
   updateProgress(data);
   setDone(data.done);
@@ -174,7 +208,7 @@ async function loadNext() {
 }
 
 async function annotate(label, direction) {
-  if (state.busy || !state.current) return;
+  if (state.busy || !state.current || state.mode !== "annotate") return;
 
   state.busy = true;
   const exitX = direction === "right" ? window.innerWidth : direction === "left" ? -window.innerWidth : 0;
@@ -198,7 +232,7 @@ async function annotate(label, direction) {
 }
 
 async function undo() {
-  if (state.busy) return;
+  if (state.busy || state.mode !== "annotate") return;
   state.busy = true;
   try {
     const data = await api("/api/undo", { method: "POST", body: "{}" });
@@ -212,7 +246,7 @@ async function undo() {
 }
 
 function pointerDown(event) {
-  if (state.busy || !state.current || elements.reviewStage.hidden) return;
+  if (state.busy || !state.current || state.mode !== "annotate" || elements.reviewStage.hidden) return;
 
   state.pointer = {
     id: event.pointerId,
@@ -255,12 +289,126 @@ function pointerUp(event) {
 }
 
 function handleKeydown(event) {
-  if (event.key === "ArrowRight") {
+  if (state.mode === "review" && (event.metaKey || event.ctrlKey) && event.key === "Enter") {
+    saveCommentAndNext();
+  } else if (state.mode !== "annotate") {
+    return;
+  } else if (event.key === "ArrowRight") {
     annotate(state.labels.right, "right");
   } else if (event.key === "ArrowLeft") {
     annotate(state.labels.left, "left");
   } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
     undo();
+  }
+}
+
+function reviewStats() {
+  const total = state.reviewItems.length;
+  const commented = state.reviewItems.filter((item) => (item.comment || "").trim().length > 0).length;
+  return {
+    total,
+    commented,
+    missing: total - commented
+  };
+}
+
+function updateReviewHeader() {
+  const stats = reviewStats();
+  const item = state.reviewItems[state.reviewIndex];
+  elements.reviewStatus.textContent = stats.total
+    ? `Comments ${stats.commented}/${stats.total} saved, ${stats.missing} missing`
+    : "No no/skip images to review";
+  elements.reviewLabel.textContent = item ? labelDisplay(item.label) : "";
+}
+
+function nextReviewIndex(startIndex, missingOnly = false) {
+  if (state.reviewItems.length === 0) return 0;
+  for (let offset = 1; offset <= state.reviewItems.length; offset += 1) {
+    const index = (startIndex + offset) % state.reviewItems.length;
+    const item = state.reviewItems[index];
+    if (!missingOnly || !(item.comment || "").trim()) {
+      return index;
+    }
+  }
+  return (startIndex + 1) % state.reviewItems.length;
+}
+
+async function renderReviewItem(index) {
+  if (state.reviewItems.length === 0) {
+    state.current = null;
+    elements.prompt.textContent = "No no/skip images";
+    elements.filename.textContent = "";
+    elements.metadata.textContent = "";
+    elements.imageFrame.classList.remove("loading-image");
+    elements.image.hidden = true;
+    elements.image.removeAttribute("src");
+    elements.image.alt = "";
+    elements.commentText.value = "";
+    updateReviewHeader();
+    setReviewDisabled(true);
+    return;
+  }
+
+  state.reviewIndex = index;
+  const item = state.reviewItems[state.reviewIndex];
+  setReviewDisabled(true);
+  elements.commentText.value = item.comment || "";
+  updateReviewHeader();
+  await renderImage(item);
+  updateReviewHeader();
+  setReviewDisabled(false);
+  elements.commentText.focus();
+}
+
+async function enterReviewMode() {
+  if (state.busy) return;
+  state.busy = true;
+  try {
+    setMode("review");
+    const data = await api("/api/review/items");
+    updateProgress(data);
+    state.reviewItems = data.items || [];
+    const firstMissing = state.reviewItems.findIndex((item) => !(item.comment || "").trim());
+    await renderReviewItem(firstMissing === -1 ? 0 : firstMissing);
+  } catch (error) {
+    alert(`Could not load review items: ${error.message}`);
+    setMode("annotate");
+  } finally {
+    state.busy = false;
+  }
+}
+
+async function saveCommentAndNext() {
+  if (state.busy || state.mode !== "review" || state.reviewItems.length === 0) return;
+  const item = state.reviewItems[state.reviewIndex];
+  const comment = elements.commentText.value;
+
+  state.busy = true;
+  setReviewDisabled(true);
+  try {
+    const data = await api("/api/comment", {
+      method: "POST",
+      body: JSON.stringify({ id: item.id, comment })
+    });
+    updateProgress(data);
+    item.comment = comment;
+    updateReviewHeader();
+    await renderReviewItem(nextReviewIndex(state.reviewIndex, true));
+  } catch (error) {
+    alert(`Could not save comment: ${error.message}`);
+    setReviewDisabled(false);
+  } finally {
+    state.busy = false;
+  }
+}
+
+async function nextReviewItem() {
+  if (state.busy || state.mode !== "review" || state.reviewItems.length === 0) return;
+  state.busy = true;
+  try {
+    await renderReviewItem(nextReviewIndex(state.reviewIndex, false));
+  } finally {
+    state.busy = false;
   }
 }
 
@@ -272,6 +420,10 @@ elements.skipButton.addEventListener("click", () => annotate(state.labels.skip, 
 elements.noButton.addEventListener("click", () => annotate(state.labels.left, "left"));
 elements.yesButton.addEventListener("click", () => annotate(state.labels.right, "right"));
 elements.undoButton.addEventListener("click", undo);
+elements.reviewButton.addEventListener("click", enterReviewMode);
+elements.annotateButton.addEventListener("click", loadNext);
+elements.nextReviewButton.addEventListener("click", nextReviewItem);
+elements.saveCommentButton.addEventListener("click", saveCommentAndNext);
 window.addEventListener("keydown", handleKeydown);
 
 loadNext().catch((error) => {

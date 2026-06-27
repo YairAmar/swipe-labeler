@@ -2,6 +2,8 @@
 
 Mobile-first yes/no/skip image annotation for Hebrew image datasets. The app serves images from a local folder, shows the Hebrew prompt, and saves every action to a local SQLite database on the host laptop.
 
+`No` and `Skip` labels can be reviewed later in the app. Reviewers can add free-text comments that describe what should change when regenerating better images.
+
 ## Quick Start
 
 ```bash
@@ -68,6 +70,8 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for the full MacBook-to-MacBook runbook, back
 - Swipe right or tap `Yes` to write `yes`.
 - Swipe left or tap `No` to write `no`.
 - Tap `Skip` to write `skip`.
+- Tap `Review` to go over `no` and `skip` items and add regeneration comments.
+- In review mode, write a comment and tap `Save & Next`.
 - `Undo` reverses the last annotation in the current server session.
 - `CSV` downloads the current CSV export.
 - Existing SQLite rows are loaded on startup, so the app resumes from the next unlabeled image.
@@ -95,11 +99,12 @@ Database tables:
 
 - `annotations`: current label per image file.
 - `annotation_events`: append-only event log for annotate/import/undo actions.
+- `annotations.comment`: reviewer note for `no` and `skip` images.
 
 CSV format:
 
 ```csv
-file,prompt,label,annotated_at
+file,prompt,label,comment,annotated_at
 ```
 
 ## Direct Server Command
