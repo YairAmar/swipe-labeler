@@ -31,18 +31,18 @@ Start the server on the MacBook:
 In another terminal, create the public URL:
 
 ```bash
-npx --yes localtunnel --port 3000 --local-host 127.0.0.1
+npx --yes cloudflared tunnel --url http://127.0.0.1:3000
 ```
 
-Localtunnel prints a URL like:
+Cloudflare prints a URL like:
 
 ```text
-https://example-name.loca.lt
+https://example-name.trycloudflare.com
 ```
 
 Share that URL. No IP address, username, or password is required.
 
-Keep both terminals open while annotating. If the tunnel dies, run the `localtunnel` command again and use the new URL.
+Keep both terminals open while annotating. If the tunnel dies, run the `cloudflared` command again and use the new URL.
 
 ## Other Hosting Modes
 
