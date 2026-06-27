@@ -66,7 +66,38 @@ Outputs will be:
 ~/Desktop/annotator-output/annotations.csv
 ```
 
+## Public URL Access
+
+This is the recommended workflow. It does not require the annotator to be on the same Wi-Fi, and it does not require an IP address, username, or password. Anyone with the URL can annotate.
+
+Terminal 1:
+
+```bash
+./scripts/run-local.sh "$HOME/Desktop/batch_images" "$HOME/Desktop/annotator-output"
+```
+
+Terminal 2:
+
+```bash
+npx --yes localtunnel --port 3000 --local-host 127.0.0.1
+```
+
+Localtunnel prints a URL like:
+
+```text
+https://example-name.loca.lt
+```
+
+Open that URL from any device. When prompted:
+
+- No username is required.
+- No password is required.
+
+Keep both terminals open. If the tunnel dies, run the `localtunnel` command again and use the new URL.
+
 ## Same-Wi-Fi iPhone Access
+
+This mode is optional. The public URL mode above avoids IP-address sharing.
 
 Run the server on all network interfaces:
 
@@ -87,36 +118,6 @@ http://<macbook-wifi-ip>:3000
 ```
 
 Only use `HOST=0.0.0.0` on a trusted network.
-
-## Public Temporary URL
-
-For access without the same Wi-Fi, keep the app bound to localhost and expose it with a temporary tunnel.
-
-Terminal 1:
-
-```bash
-ANNOTATOR_PASSWORD="choose-a-password" \
-./scripts/run-local.sh "$HOME/Desktop/batch_images" "$HOME/Desktop/annotator-output"
-```
-
-Terminal 2:
-
-```bash
-npx --yes localtunnel --port 3000 --local-host 127.0.0.1
-```
-
-Localtunnel prints a URL like:
-
-```text
-https://example-name.loca.lt
-```
-
-Open that URL from any device. When prompted:
-
-- Username: any value
-- Password: the `ANNOTATOR_PASSWORD` from Terminal 1
-
-Keep both terminals open. If the tunnel dies, run the `localtunnel` command again and use the new URL.
 
 ## Annotation Storage
 
@@ -140,11 +141,10 @@ Export CSV through the app:
 http://127.0.0.1:3000/api/export.csv
 ```
 
-Or from the terminal if password protection is enabled:
+Or from the terminal:
 
 ```bash
-curl -u user:choose-a-password \
-  http://127.0.0.1:3000/api/export.csv \
+curl http://127.0.0.1:3000/api/export.csv \
   -o "$HOME/Desktop/annotator-output/annotations.csv"
 ```
 
@@ -177,8 +177,8 @@ The app loads existing SQLite rows and continues from the next unlabeled image.
 
 ## Safety Checklist Before Sharing
 
-- Use `ANNOTATOR_PASSWORD` for any tunnel or public access.
-- Keep `HOST=127.0.0.1` when using a public tunnel.
+- Anyone with the public tunnel URL can annotate; share it only with intended annotators.
+- Keep `HOST=127.0.0.1` when using a public tunnel so only the tunnel exposes the app.
 - Do not push `batch_images`, `annotations.sqlite`, `annotations.csv`, or `batch_manifest.jsonl`.
 - Back up `annotations.sqlite` periodically.
 - Stop the tunnel when the labeling session is done.

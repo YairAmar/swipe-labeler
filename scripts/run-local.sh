@@ -11,13 +11,11 @@ Usage:
 Environment:
   HOST=127.0.0.1              Bind host. Use 0.0.0.0 for same-Wi-Fi phone access.
   PORT=3000                   Server port.
-  ANNOTATOR_PASSWORD=...      Optional basic-auth password.
   ANNOTATIONS_DB=...          Optional SQLite DB path.
   ANNOTATIONS_CSV=...         Optional CSV export path.
 
 Examples:
   scripts/run-local.sh "$HOME/Desktop/batch_images"
-  ANNOTATOR_PASSWORD="change-me" scripts/run-local.sh "$HOME/Desktop/batch_images" "$HOME/Desktop/annotator-output"
   HOST=0.0.0.0 scripts/run-local.sh "$HOME/Desktop/batch_images"
 EOF
 }
@@ -48,10 +46,6 @@ args=(
   --host "$HOST"
   --port "$PORT"
 )
-
-if [[ -n "${ANNOTATOR_PASSWORD:-}" ]]; then
-  args+=(--password "$ANNOTATOR_PASSWORD")
-fi
 
 echo "Image directory: $DATA_DIR"
 echo "SQLite DB:       $DB_PATH"

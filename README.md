@@ -20,7 +20,31 @@ http://127.0.0.1:3000
 
 The image folder should be copied separately, for example by AirDrop. Do not commit image data to the repo.
 
-## Common Hosting Modes
+## Recommended Hosting Mode: Public URL
+
+Start the server on the MacBook:
+
+```bash
+./scripts/run-local.sh "$HOME/Desktop/batch_images" "$HOME/Desktop/annotator-output"
+```
+
+In another terminal, create the public URL:
+
+```bash
+npx --yes localtunnel --port 3000 --local-host 127.0.0.1
+```
+
+Localtunnel prints a URL like:
+
+```text
+https://example-name.loca.lt
+```
+
+Share that URL. No IP address, username, or password is required.
+
+Keep both terminals open while annotating. If the tunnel dies, run the `localtunnel` command again and use the new URL.
+
+## Other Hosting Modes
 
 Private on the MacBook:
 
@@ -28,7 +52,7 @@ Private on the MacBook:
 ./scripts/run-local.sh "$HOME/Desktop/batch_images" "$HOME/Desktop/annotator-output"
 ```
 
-iPhone on the same Wi-Fi:
+iPhone on the same Wi-Fi, if you do not want a public URL:
 
 ```bash
 HOST=0.0.0.0 ./scripts/run-local.sh "$HOME/Desktop/batch_images" "$HOME/Desktop/annotator-output"
@@ -36,21 +60,6 @@ ipconfig getifaddr en0
 ```
 
 Then open `http://<macbook-wifi-ip>:3000` on the iPhone.
-
-Public temporary URL:
-
-```bash
-ANNOTATOR_PASSWORD="choose-a-password" \
-./scripts/run-local.sh "$HOME/Desktop/batch_images" "$HOME/Desktop/annotator-output"
-```
-
-In another terminal:
-
-```bash
-npx --yes localtunnel --port 3000 --local-host 127.0.0.1
-```
-
-Use any username and the configured password when the browser asks for login.
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the full MacBook-to-MacBook runbook, backup commands, tunnel instructions, and safety checklist.
 
@@ -103,8 +112,7 @@ node --no-warnings server.js \
   --db /path/to/annotations.sqlite \
   --save /path/to/annotations.csv \
   --host 127.0.0.1 \
-  --port 3000 \
-  --password "optional-password"
+  --port 3000
 ```
 
 ## Dataset Handling
